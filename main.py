@@ -1,16 +1,17 @@
 from distutils.command.config import config
-from os import stat
 from models import *
 import json
 from websocket import create_connection, WebSocket, WebSocketTimeoutException
 from utils import convert_turn_to_state
+from server import run_server
 
-
+teams = json.loads(open('teams.json', 'r').read())
 DAWE_URL = "draftlol.dawe.gg"
-WS_SERVER = "ws://localhost:8998"
+PORT = "8998"
+WS_SERVER = "ws://localhost:" + PORT
 
 GAME_VERSION = "12.18.1"
-DAWE_ID = "33ILp4iP"
+DAWE_ID = "1bLGkT7S"
 
 def init():
     status = status_start()
@@ -19,6 +20,7 @@ def init():
     lol_ui_socket = create_connection(WS_SERVER)
     dawe_socket.send('{"type":"joinroom","roomId":"'+ DAWE_ID +'"}')
     while True:
+        print("alive")
         try:
             dawe_data = json.loads(dawe_socket.recv())['newState']
             if dawe_data['state'] == 'ongoing' and status.state == 'starting':
@@ -43,8 +45,8 @@ def update_game(socket:WebSocket, status: State, dawe_data: dict):
     status.state = convert_turn_to_state(dawe_data['turn'])
     status.blueTeam.bans= [ Ban(Champion(name, GAME_VERSION), False) for name in dawe_data["blueBans"] ]
     status.redTeam.bans= [ Ban(Champion(name, GAME_VERSION), False) for name in dawe_data["redBans"] ]
-    status.blueTeam.picks= [Pick(Champion(dawe_data["bluePicks"][i], GAME_VERSION), i, '', False)  for i in range(0, len(dawe_data["bluePicks"]))]
-    status.redTeam.picks= [Pick(Champion(dawe_data["redPicks"][i], GAME_VERSION), i, '', False) for i in range(0, len(dawe_data["redPicks"]))]
+    status.blueTeam.picks= [Pick(Champion(dawe_data["bluePicks"][i], GAME_VERSION), i, teams[status.config["frontend"]["blueTeam"]["name"]][i], False)  for i in range(0, len(dawe_data["bluePicks"]))]
+    status.redTeam.picks= [Pick(Champion(dawe_data["redPicks"][i], GAME_VERSION), i, teams[status.config["frontend"]["redTeam"]["name"]][i], False) for i in range(0, len(dawe_data["redPicks"]))]
     status.timer = int(dawe_data["nextTimeout"]/1000)
 
     set_active(status,  dawe_data["nextTeam"],  dawe_data["nextType"])
@@ -81,9 +83,14 @@ def start_game(socket: WebSocket, status: State):
     socket.send(MyJSONEncoder().encode(Message(status)))
 
 def status_start():
-    config = json.loads(open('config.json', 'r').read())
+    config = json.loads(open('front-config.json', 'r').read())
     status = State(blueTeam = Team([],[],False), redTeam= Team([],[], False), version=GAME_VERSION, time=30, state="starting", config=config)
     return status
 
+
+import multiprocessing
 if __name__ == '__main__':
+    pr = multiprocessing.Process(target = run_server, args=(PORT,) )
+    pr.start()
+    print("SATRTING")
     init()
