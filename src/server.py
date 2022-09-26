@@ -7,7 +7,7 @@ import asyncio
 import random 
 import functools
 
-clients = set()
+clients = {}
 
 MIME_TYPES = {
     "html": "text/html",
@@ -30,7 +30,6 @@ async def process_request(sever_root, path, request_headers):
         ('Connection', 'close'),
     ]
 
-    # Derive full system path
     full_path = os.path.realpath(os.path.join(sever_root, path[1:]))
 
     # Validate the path
@@ -53,16 +52,17 @@ async def process_request(sever_root, path, request_headers):
 
 
 async def time(websocket, path):
-    clients.add(websocket)
+    if path not in clients:
+        clients[path] = set()
+    clients[path].add(websocket)
     while websocket.open:
-        # now = datetime.datetime.utcnow().isoformat() + 'Z'
-        message = await websocket.recv()
-        for ws in clients:
-            await ws.send(message)
-    # This print will not run when abrnomal websocket close happens
-    # for example when tcp connection dies and no websocket close frame is sent
-    print("WebSocket connection closed for", websocket.remote_address)
-
+        try:
+            message = await websocket.recv()
+            for ws in clients[path]:
+                await ws.send(message)
+        except:
+            clients[path].remove(websocket)
+            
 
 def run_server(port: int):
     handler = functools.partial(process_request, os.getcwd())
@@ -72,44 +72,3 @@ def run_server(port: int):
 
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
-
-# import asyncio
-# from websockets import serve
-
-# connected = set()
-
-# async def handler(websocket, path):
-#     data = await websocket.recv()
-#     connected.add(websocket)
-#     print(len(connected))
-#     for socket in connected:
-#         print("sending data: " + data)
-#         await socket.send(data)
-
-
-# async def run(port: int):
-#     async with serve(handler, "localhost", port):
-#         await asyncio.Future()  # run forever
-# def run_server(port: int):
-#     asyncio.run(run(port))
-
-# from simple_websocket_server import WebSocketServer
-# from simple_websocket_server import WebSocket as WebSocketS
-# class WebServer(WebSocketS):
-#     def handle(self):
-#         # echo message back to client
-#         for client in clients:
-#             if client != self:
-#                 client.send_message(self.data)
-
-#     def connected(self):
-#         print(self.address, 'connected')
-#         clients.append(self)
-
-#     def handle_close(self):
-#         clients.remove(self)
-# clients = []
-
-# def run_server(port: int):
-#     server = WebSocketServer('', port, WebServer)
-#     server.serve_forever()
