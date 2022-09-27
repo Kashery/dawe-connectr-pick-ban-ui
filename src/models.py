@@ -1,9 +1,9 @@
 
 
-import json
 from json import JSONEncoder
-from math import ceil
 from pydantic import BaseModel
+from fastapi import WebSocket
+from typing import List
 
 class Match(BaseModel):
         # DaweDraft(nameKey, match_data.dawe_id, PORT, match_data.game_version, match_data.blue_players, match_data.red_players, match_data.game_config).init()
@@ -91,3 +91,20 @@ class MyJSONEncoder(JSONEncoder):
     def default(self, obj):
         return obj.__dict__
 
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)

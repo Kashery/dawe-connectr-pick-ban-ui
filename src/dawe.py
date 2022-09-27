@@ -1,12 +1,14 @@
-from distutils.command.config import config
 from models import *
 import json
-from websocket import create_connection, WebSocket, WebSocketTimeoutException
+import asyncio
+from threading import Event
+from websocket import create_connection, WebSocketTimeoutException
 from utils import convert_turn_to_state
+
 DAWE_URL = "draftlol.dawe.gg"
 WS_SERVER = "ws://localhost:" 
 class DaweDraft:
-    def __init__(self, path_key : str, dawe_game : str, port: str, game_version: str, blueTeam: list, redTeam: list, config) -> None:
+    def __init__(self, path_key : str, dawe_game : str, port: str, game_version: str, blueTeam: list, redTeam: list, config, manager: ConnectionManager, event: Event) -> None:
         self.path_key = path_key
         self.dawe_game = dawe_game
         self.port = port
@@ -17,13 +19,13 @@ class DaweDraft:
         self.status_start()
         self.dawe_socket = create_connection("wss://" + DAWE_URL)
         self.dawe_socket.settimeout(1)
-        self.lol_ui_socket = create_connection(WS_SERVER + str(port) + "/" + self.path_key)
+        self.event = event
         self.dawe_socket.send('{"type":"joinroom","roomId":"'+ self.dawe_game +'"}')
+        self.manager = manager
         pass
     def init(self ):
 
         while True:
-            print("alive")
             try:
                 dawe_data = json.loads(self.dawe_socket.recv())['newState']
                 if dawe_data['state'] == 'ongoing' and self.status.state == 'starting':
@@ -36,19 +38,21 @@ class DaweDraft:
                     self.update_game(dawe_data)
                     
             except WebSocketTimeoutException:
-                try:
-                    if self.status.state == 'ongoing':
-                        self.send_time()
-                    else: 
-                        self.lol_ui_socket.send(MyJSONEncoder().encode(Message(self.status)))
-                except ConnectionAbortedError:
-                    print("error")
-                    pass
+                print("timeout listening, sending time")
+                if dawe_data['state'] == 'ongoing':
+                    self.send_time()
+                elif dawe_data['state'] == 'finished': 
+                    break
+                self.send(MyJSONEncoder().encode(Message(self.status)))
+            finally:
+                if self.event.is_set():
+                    break
+
                     
 
     def send_time(self):
         self.status.timer -= 1
-        self.lol_ui_socket.send(MyJSONEncoder().encode(Message(self.status)))
+        self.send(MyJSONEncoder().encode(Message(self.status)))
 
     def update_game(self, dawe_data: dict):
 
@@ -56,13 +60,21 @@ class DaweDraft:
         self.status.blueTeam.bans= [ Ban(Champion(name, self.game_version), False) for name in dawe_data["blueBans"] ]
         self.status.redTeam.bans= [ Ban(Champion(name, self.game_version), False) for name in dawe_data["redBans"] ]
         self.status.blueTeam.picks= [Pick(Champion(dawe_data["bluePicks"][i], self.game_version), i, self.blueTeam[i], False)  for i in range(0, len(dawe_data["bluePicks"]))]
-        # self.status.blueTeam.picks= [Pick(Champion(dawe_data["bluePicks"][i], self.game_versio), i, teams[status.config["frontend"]["blueTeam"]["name"]][i], False)  for i in range(0, len(dawe_data["bluePicks"]))]
         self.status.redTeam.picks= [Pick(Champion(dawe_data["redPicks"][i], self.game_version), i, self.redTeam[i], False) for i in range(0, len(dawe_data["redPicks"]))]
         self.status.timer = int(dawe_data["nextTimeout"]/1000)
 
         self.set_active(dawe_data["nextTeam"],  dawe_data["nextType"])
 
-        self.lol_ui_socket.send(MyJSONEncoder().encode(Message(self.status)))
+        self.send(MyJSONEncoder().encode(Message(self.status)))
+    
+    def send(self, message):
+        # try:
+        #     self.lol_ui_socket
+        print(len(self.manager.active_connections))
+        asyncio.run(self.manager.broadcast(message))
+        # except ConnectionResetError or ConnectionAbortedError as e:
+        #     print(e)
+        #     self.lol_ui_socket = create_connection(WS_SERVER + str(self.port) + "/register/" + self.path_key)
 
     def set_active(self, currentTeam: str, currentType: str):
         self.unset_active()
@@ -90,8 +102,8 @@ class DaweDraft:
             team.bans[len(team.bans) - 1].isActive = True
 
     def start_game(self):
-        self.lol_ui_socket.send('{"eventType":"champSelectStarted"}')
-        self.lol_ui_socket.send(MyJSONEncoder().encode(Message(self.status)))
+        self.send('{"eventType":"champSelectStarted"}')
+        self.send(MyJSONEncoder().encode(Message(self.status)))
 
     def status_start(self):
         config = self.config
