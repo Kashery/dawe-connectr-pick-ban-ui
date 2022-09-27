@@ -25,9 +25,9 @@ def shutdown_event():
             game[0].join()
 
 
-app.mount("/cache", StaticFiles(directory="cache"), name="cache")
+app.mount("/cache", StaticFiles(directory="/cache"), name="cache")
 
-@app.websocket("/{nameKey}")
+@app.websocket("/ws/{nameKey}")
 async def websocket_end(websocket:WebSocket, nameKey: str):
     if nameKey not in ws_manager:
         ws_manager[nameKey] = ConnectionManager()

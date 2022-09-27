@@ -1,0 +1,15 @@
+version: "3.9"  # optional since v1.27.0
+services:
+  web:
+    image: nginx
+    volumes:
+      - ./configs/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend:/usr/share/nginx/html
+    ports:
+    - "80:80"
+
+  connector:
+    image: connector
+    volumes:
+      - ./cache:/cache
+
