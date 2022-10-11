@@ -5,7 +5,7 @@ import uvicorn
 from dawe import DaweDraft
 from fastapi.staticfiles import StaticFiles
 import threading
-
+from utils import construct_config
     
 
 PORT = "4557"
@@ -25,7 +25,7 @@ def shutdown_event():
             game[0].join()
 
 
-app.mount("/cache", StaticFiles(directory="./cache"), name="cache")
+app.mount("/cache", StaticFiles(directory="/cache"), name="cache")
 
 @app.websocket("/ws/{nameKey}")
 async def websocket_end(websocket:WebSocket, nameKey: str):
@@ -51,17 +51,18 @@ async def create_dawe_game(nameKey: str, match_data: Match, background_tasks: Ba
 
     event = multiprocessing.Event()
     
-    thread = threading.Thread(target = dawe_game, args= (nameKey, match_data.dawe_id, PORT, match_data.game_version, match_data.blue_players, match_data.red_players, match_data.game_config, ))
+    thread = threading.Thread(target = dawe_game, args= (nameKey, match_data, PORT, ))
     active_games[nameKey] = (thread, event)
     thread.start()
     
     
 
 
-def dawe_game(nameKey, dawe_id, PORT, game_version, blue_players, red_players, game_config):
+def dawe_game(nameKey, match_data: Match, PORT):
     if nameKey not in ws_manager:
         ws_manager[nameKey] = ConnectionManager()
-    DaweDraft(nameKey, dawe_id, PORT, game_version, blue_players, red_players, game_config, ws_manager[nameKey],active_games[nameKey][1]).init()
+    game_config = construct_config(nameKey, match_data.game_version, match_data.blue_team, match_data.red_team, match_data.tournament_logo)
+    DaweDraft(nameKey, match_data.dawe_id, PORT, match_data.game_version, match_data.blue_team.players, match_data.red_team.players, game_config, ws_manager[nameKey],active_games[nameKey][1]).init()
 
 if __name__ == '__main__':
 

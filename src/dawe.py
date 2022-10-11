@@ -68,13 +68,9 @@ class DaweDraft:
         self.send(MyJSONEncoder().encode(Message(self.status)))
     
     def send(self, message):
-        # try:
-        #     self.lol_ui_socket
+
         print(len(self.manager.active_connections))
         asyncio.run(self.manager.broadcast(message))
-        # except ConnectionResetError or ConnectionAbortedError as e:
-        #     print(e)
-        #     self.lol_ui_socket = create_connection(WS_SERVER + str(self.port) + "/register/" + self.path_key)
 
     def set_active(self, currentTeam: str, currentType: str):
         self.unset_active()

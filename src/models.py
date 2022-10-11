@@ -5,13 +5,22 @@ from pydantic import BaseModel
 from fastapi import WebSocket
 from typing import List
 
+
+class RegisteredTeam(BaseModel):
+    name: str
+    logo: str
+    score: int
+    coach: str
+    players: list[str]
+
 class Match(BaseModel):
         # DaweDraft(nameKey, match_data.dawe_id, PORT, match_data.game_version, match_data.blue_players, match_data.red_players, match_data.game_config).init()
     dawe_id: str
     game_version: str
-    blue_players: list[str]
-    red_players: list[str]
-    game_config: dict
+    blue_team: RegisteredTeam
+    red_team: RegisteredTeam
+    tournament_logo: str
+    
 
 
 class Champion:
