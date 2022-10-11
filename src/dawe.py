@@ -51,7 +51,8 @@ class DaweDraft:
                     
 
     def send_time(self):
-        self.status.timer -= 1
+        if self.status.timer > 0:
+            self.status.timer -= 1
         self.send(MyJSONEncoder().encode(Message(self.status)))
 
     def update_game(self, dawe_data: dict):
